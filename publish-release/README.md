@@ -1,12 +1,16 @@
-# Publish Release Workflow
+# Publish Release Action
 
-リリースPRがマージされた際に、npmパッケージの公開とGitHubリリースの作成を自動実行する再利用可能なGitHub Actionsワークフローです。
+リリースPRがマージされた際に、npmパッケージの公開とGitHubリリースの作成を自動実行するGitHub Actionです。
+
+このアクションは2つの方法で使用できます：
+- **Composite Action** として（推奨）
+- **Reusable Workflow** として
 
 ## 機能
 
 - 📦 npmへの自動パッケージ公開（Provenanceサポート）
 - 🏷️ GitHubリリースとタグの自動作成
-- 💬 PRへの結果コメント自動投稿
+- 💬 PRへの結果コメント自動投稿（Reusable Workflowのみ）
 - ✅ タグの重複チェック
 - 🔄 複数のパッケージマネージャーサポート（npm / Bun）
 - 🧪 ビルドとテストの実行
@@ -14,7 +18,7 @@
 
 ## 使い方
 
-### 基本的な使い方
+### 方法1: Composite Action として使用（推奨）
 
 呼び出し元のリポジトリで、以下のようなワークフローファイルを作成してください：
 
@@ -30,12 +34,28 @@ on:
 
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    # リリースPRがマージされた場合のみ実行
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Publish Release
+        uses: <organization>/<repository>/publish-release@main
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
 ```
 
-### すべてのオプションを使った例
+### 方法2: Reusable Workflow として使用
+
+呼び出し元のリポジトリで、以下のようなワークフローファイルを作成してください：
 
 ```yaml
 name: Publish Release
@@ -49,19 +69,51 @@ on:
 
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
-    with:
-      node-version: '20.x'
-      package-manager: 'bun'
-      build-command: 'bun run build'
-      test-command: 'bun test'
-      npm-access: 'public'
-      release-label: 'Type: Release'
-      skip-npm-publish: false
-      skip-github-release: false
-      comment-on-pr: true
+    uses: <organization>/<repository>/publish-release/publish-release.yml@main
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+```
+
+**注意**: Reusable Workflowの場合、PRのマージチェックとラベルチェックは自動的に行われます。
+
+### すべてのオプションを使った例（Composite Action）
+
+```yaml
+name: Publish Release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Publish Release
+        uses: <organization>/<repository>/publish-release@main
+        with:
+          node-version: '20.x'
+          package-manager: 'bun'
+          build-command: 'bun run build'
+          test-command: 'bun test'
+          npm-access: 'public'
+          skip-npm-publish: 'false'
+          skip-github-release: 'false'
+          npm-token: ${{ secrets.NPM_TOKEN }}
+          pr-body: ${{ github.event.pull_request.body }}
 ```
 
 ## 入力パラメータ
@@ -73,10 +125,13 @@ jobs:
 | `build-command` | ❌ | `bun run build` | ビルドコマンド。空文字列でスキップ |
 | `test-command` | ❌ | `bun test` | テストコマンド。空文字列でスキップ |
 | `npm-access` | ❌ | `public` | npmアクセスレベル（public または restricted） |
-| `release-label` | ❌ | `Type: Release` | リリースをトリガーするPRラベル |
+| `release-label` | ❌ | `Type: Release` | リリースをトリガーするPRラベル（Reusable Workflowのみ） |
 | `skip-npm-publish` | ❌ | `false` | npm公開をスキップするか |
 | `skip-github-release` | ❌ | `false` | GitHubリリース作成をスキップするか |
-| `comment-on-pr` | ❌ | `true` | PRに結果をコメントするか |
+| `comment-on-pr` | ❌ | `true` | PRに結果をコメントするか（Reusable Workflowのみ） |
+| `npm-token` | ❌ | - | NPM Token（Composite Actionのみ必須） |
+| `github-token` | ❌ | `${{ github.token }}` | GitHub Token（Composite Actionのみ） |
+| `pr-body` | ❌ | `${{ github.event.pull_request.body }}` | PRの本文（リリースノートとして使用、Composite Action） |
 
 ## 出力
 
@@ -85,13 +140,44 @@ jobs:
 | `version` | 公開されたバージョン番号 |
 | `release-url` | GitHubリリースのURL |
 | `npm-url` | npmパッケージのURL |
+| `tag-exists` | タグが既に存在するか（Composite Actionのみ） |
 
-### 出力の使用例
+### 出力の使用例（Composite Action）
 
 ```yaml
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Publish Release
+        id: publish
+        uses: <organization>/<repository>/publish-release@main
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Show outputs
+        if: steps.publish.outputs.tag-exists == 'false'
+        run: |
+          echo "Published version: ${{ steps.publish.outputs.version }}"
+          echo "Release URL: ${{ steps.publish.outputs.release-url }}"
+          echo "npm URL: ${{ steps.publish.outputs.npm-url }}"
+```
+
+### 出力の使用例（Reusable Workflow）
+
+```yaml
+jobs:
+  publish:
+    uses: <organization>/<repository>/publish-release/publish-release.yml@main
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -108,25 +194,39 @@ jobs:
 
 ## 必要な権限
 
-このワークフローは以下の権限が必要です：
+### Composite Actionの場合
+
+呼び出し元のジョブに以下の権限を設定してください：
 
 ```yaml
 permissions:
   contents: write        # GitHubリリースとタグの作成
   id-token: write        # npm Provenance（来歴情報）
-  pull-requests: write   # PRへのコメント
+  pull-requests: write   # PRへのコメント（オプション）
 ```
+
+### Reusable Workflowの場合
+
+権限は自動的に設定されるため、呼び出し元での設定は不要です。
 
 ## 前提条件
 
 ### 必須
 
 - リポジトリに `package.json` ファイルが存在すること
+
+### Composite Actionの場合
+
+- 呼び出し元のワークフローで、PRがマージされリリースラベルが付与されているかを確認する条件を設定すること
+- npm tokenをシークレット `NPM_TOKEN` として登録（npm公開する場合）
+
+### Reusable Workflowの場合
+
 - リリース用のPRに指定されたラベル（デフォルト: `Type: Release`）が付与されていること
+- npm tokenをシークレット `NPM_TOKEN` として登録（npm公開する場合）
 
 ### npmへの公開を行う場合
 
-- npm tokenをシークレット `NPM_TOKEN` として登録
 - package.jsonに公開に必要な情報が含まれていること
 
 ### Bunを使用する場合
@@ -135,46 +235,56 @@ permissions:
 
 ## ワークフローの動作
 
+### Reusable Workflowの場合
+
 1. **PRマージの確認**
    - PRがマージされていること
    - 指定されたラベルが付与されていることを確認
 
-2. **パッケージ情報の取得**
+### 共通の動作
+
+1. **パッケージ情報の取得**
    - package.jsonからバージョンとパッケージ名を取得
 
-3. **タグの重複チェック**
+2. **タグの重複チェック**
    - 同じバージョンのタグが既に存在しないか確認
    - 存在する場合は以降の処理をスキップ
 
-4. **環境セットアップ**
+3. **環境セットアップ**
    - Node.jsのセットアップ
    - パッケージマネージャーのセットアップ
    - 依存関係のインストール
 
-5. **ビルドとテスト**
+4. **ビルドとテスト**
    - ビルドコマンドを実行
    - テストコマンドを実行
 
-6. **npm公開** （`skip-npm-publish: false` の場合）
+5. **npm公開** （`skip-npm-publish: false` の場合）
    - Provenanceを含めてnpmに公開
    - `NPM_TOKEN` シークレットを使用
 
-7. **GitHubリリース作成** （`skip-github-release: false` の場合）
+6. **GitHubリリース作成** （`skip-github-release: false` の場合）
    - バージョンタグを作成
    - PRの本文をリリースノートとして使用
    - GitHubリリースを作成
 
-8. **PR通知** （`comment-on-pr: true` の場合）
+7. **PR通知** （`comment-on-pr: true` の場合、Reusable Workflowのみ）
    - 成功/失敗を示すコメントをPRに投稿
    - npmパッケージURLとGitHubリリースURLを含む
 
 ## トリガー条件
+
+### Reusable Workflowの場合
 
 このワークフローは以下の条件をすべて満たす場合に実行されます：
 
 1. PRがマージされた（`github.event.pull_request.merged == true`）
 2. PRに指定されたラベル（デフォルト: `Type: Release`）が付与されている
 3. ターゲットブランチがmainまたはmaster
+
+### Composite Actionの場合
+
+呼び出し元のワークフローで条件を設定してください。上記の使用例を参照してください。
 
 ## npm Provenanceについて
 
@@ -184,14 +294,49 @@ permissions:
 - `id-token: write` 権限が必要
 - npm v9.5.0以降で利用可能
 
+## 2つの方法の使い分け
+
+| 特徴 | Composite Action | Reusable Workflow |
+|-----|-----------------|-------------------|
+| 記述の簡潔さ | ステップとして記述 | ジョブとして記述 |
+| 権限設定 | 呼び出し元で設定が必要 | 自動的に設定される |
+| チェックアウト | 明示的に必要 | 不要 |
+| PR条件チェック | 呼び出し元で設定が必要 | 自動的に実行される |
+| PRコメント | サポートなし | サポートあり |
+| 柔軟性 | 他のステップと組み合わせやすい | ジョブ単位で独立 |
+| 推奨用途 | 他のステップと組み合わせる場合 | 単独で完結する場合（デフォルト） |
+
 ## 使用例
 
-### Node.js + npmプロジェクト
+### Node.js + npmプロジェクト（Composite Action）
 
 ```yaml
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: <organization>/<repository>/publish-release@main
+        with:
+          package-manager: 'npm'
+          build-command: 'npm run build'
+          test-command: 'npm test'
+          npm-token: ${{ secrets.NPM_TOKEN }}
+```
+
+### Node.js + npmプロジェクト（Reusable Workflow）
+
+```yaml
+jobs:
+  publish:
+    uses: <organization>/<repository>/publish-release/publish-release.yml@main
     with:
       package-manager: 'npm'
       build-command: 'npm run build'
@@ -200,44 +345,63 @@ jobs:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 ```
 
-### Bunプロジェクト（デフォルト）
+### Bunプロジェクト（デフォルト、Composite Action）
 
 ```yaml
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: <organization>/<repository>/publish-release@main
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
 ```
 
-### GitHubリリースのみ（npm公開なし）
+### GitHubリリースのみ（npm公開なし、Composite Action）
 
 ```yaml
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
-    with:
-      skip-npm-publish: true
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: <organization>/<repository>/publish-release@main
+        with:
+          skip-npm-publish: 'true'
 ```
 
-### npm公開のみ（GitHubリリースなし）
+### npm公開のみ（GitHubリリースなし、Reusable Workflow）
 
 ```yaml
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
+    uses: <organization>/<repository>/publish-release/publish-release.yml@main
     with:
       skip-github-release: true
     secrets:
       NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 ```
 
-### ビルド不要のプロジェクト
+### ビルド不要のプロジェクト（Reusable Workflow）
 
 ```yaml
 jobs:
   publish:
-    uses: <organization>/<repository>/.github/workflows/publish-release.yml@main
+    uses: <organization>/<repository>/publish-release/publish-release.yml@main
     with:
       build-command: ''
       test-command: ''
