@@ -1,0 +1,194 @@
+name: Reusable Publish Release
+
+on:
+  workflow_call:
+    inputs:
+      node-version:
+        description: 'Node.js version to use'
+        required: false
+        type: string
+        default: 'lts/*'
+      registry-url:
+        description: 'npm registry URL'
+        required: false
+        type: string
+        default: 'https://registry.npmjs.org'
+      use-bun:
+        description: 'Use Bun instead of npm for building and testing'
+        required: false
+        type: boolean
+        default: true
+      build-command:
+        description: 'Build command to run'
+        required: false
+        type: string
+        default: 'bun run build'
+      test-command:
+        description: 'Test command to run'
+        required: false
+        type: string
+        default: 'bun test'
+      skip-tests:
+        description: 'Skip running tests before publishing'
+        required: false
+        type: boolean
+        default: false
+    secrets:
+      npm-token:
+        description: 'npm authentication token for publishing'
+        required: false
+      github-token:
+        description: 'GitHub token (needs contents:write and pull-requests:write permissions)'
+        required: false
+    outputs:
+      version:
+        description: 'Published version'
+        value: ${{ jobs.release.outputs.version }}
+      release-url:
+        description: 'GitHub Release URL'
+        value: ${{ jobs.release.outputs.release-url }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write  # OIDC
+      pull-requests: write  # PR comment
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      release-url: ${{ steps.create-release.outputs.url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          persist-credentials: false
+          token: ${{ secrets.github-token || github.token }}
+
+      - name: Get package info
+        id: package
+        run: |
+          VERSION=$(jq -r '.version' package.json)
+          PACKAGE_NAME=$(jq -r '.name' package.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+      - name: Check if tag exists
+        id: tag-check
+        run: |
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "⚠️ Tag v$VERSION already exists. Skipping release."
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "✅ Tag v$VERSION does not exist. Proceeding with release."
+          fi
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
+
+      - name: Setup Node.js
+        if: steps.tag-check.outputs.exists == 'false'
+        uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: ${{ inputs.node-version }}
+          registry-url: ${{ inputs.registry-url }}
+
+      - name: Install latest npm
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          echo "Current npm version: $(npm -v)"
+          npm install -g npm@latest
+          echo "Updated npm version: $(npm -v)"
+
+      - name: Cache Bun dependencies
+        if: steps.tag-check.outputs.exists == 'false' && inputs.use-bun == true
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Setup Bun
+        if: steps.tag-check.outputs.exists == 'false' && inputs.use-bun == true
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies (Bun)
+        if: steps.tag-check.outputs.exists == 'false' && inputs.use-bun == true
+        run: bun install --frozen-lockfile
+
+      - name: Install dependencies (npm)
+        if: steps.tag-check.outputs.exists == 'false' && inputs.use-bun == false
+        run: npm ci
+
+      - name: Build
+        if: steps.tag-check.outputs.exists == 'false'
+        run: ${{ inputs.build-command }}
+
+      - name: Test
+        if: steps.tag-check.outputs.exists == 'false' && inputs.skip-tests == false
+        run: ${{ inputs.test-command }}
+
+      - name: Publish to npm with provenance
+        if: steps.tag-check.outputs.exists == 'false'
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.npm-token }}
+
+      - name: Create GitHub Release with tag
+        id: create-release
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          RELEASE_URL=$(gh release create "v$VERSION" \
+            --title "v$VERSION" \
+            --target "$SHA" \
+            --notes "$PR_BODY")
+          echo "url=$RELEASE_URL" >> $GITHUB_OUTPUT
+        env:
+          GH_TOKEN: ${{ secrets.github-token || github.token }}
+          VERSION: ${{ steps.package.outputs.version }}
+          SHA: ${{ github.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+
+      - name: Comment on PR - Success
+        if: |
+          always() &&
+          github.event_name == 'pull_request' &&
+          steps.tag-check.outputs.exists == 'false' &&
+          success()
+        run: |
+          gh pr comment "$PR_NUMBER" \
+            --body "✅ **Release v$VERSION completed successfully!**
+
+          - 📦 npm package: https://www.npmjs.com/package/$PACKAGE_NAME/v/$VERSION
+          - 🏷️ GitHub Release: $RELEASE_URL
+          - 🔗 Workflow run: $SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID"
+        env:
+          GH_TOKEN: ${{ secrets.github-token || github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          VERSION: ${{ steps.package.outputs.version }}
+          PACKAGE_NAME: ${{ steps.package.outputs.name }}
+          RELEASE_URL: ${{ steps.create-release.outputs.url }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+
+      - name: Comment on PR - Failure
+        if: |
+          always() &&
+          github.event_name == 'pull_request' &&
+          steps.tag-check.outputs.exists == 'false' &&
+          failure()
+        run: |
+          gh pr comment "$PR_NUMBER" \
+            --body "❌ **Release v$VERSION failed**
+
+          Please check the workflow logs for details.
+          🔗 Workflow run: $SERVER_URL/$REPOSITORY/actions/runs/$RUN_ID"
+        env:
+          GH_TOKEN: ${{ secrets.github-token || github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          VERSION: ${{ steps.package.outputs.version }}
+          SERVER_URL: ${{ github.server_url }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
