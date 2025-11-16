@@ -1,0 +1,158 @@
+name: 'Publish Release'
+description: 'npmパッケージの公開とGitHubリリースの作成を自動実行します。'
+author: 'yukukotani'
+
+branding:
+  icon: 'package'
+  color: 'green'
+
+inputs:
+  node-version:
+    description: '使用するNode.jsのバージョン'
+    required: false
+    default: 'lts/*'
+  package-manager:
+    description: 'パッケージマネージャー (npm または bun)'
+    required: false
+    default: 'bun'
+  build-command:
+    description: 'ビルドコマンド (空文字列でスキップ)'
+    required: false
+    default: 'bun run build'
+  test-command:
+    description: 'テストコマンド (空文字列でスキップ)'
+    required: false
+    default: 'bun test'
+  npm-access:
+    description: 'npmアクセスレベル (public または restricted)'
+    required: false
+    default: 'public'
+  skip-npm-publish:
+    description: 'npm公開をスキップするか'
+    required: false
+    default: 'false'
+  skip-github-release:
+    description: 'GitHubリリース作成をスキップするか'
+    required: false
+    default: 'false'
+  npm-token:
+    description: 'NPM Token (npm公開に使用)'
+    required: false
+  github-token:
+    description: 'GitHub Token (リリース作成に使用)'
+    required: false
+    default: ${{ github.token }}
+  pr-body:
+    description: 'PRの本文 (リリースノートとして使用)'
+    required: false
+    default: ${{ github.event.pull_request.body }}
+
+outputs:
+  version:
+    description: '公開されたバージョン番号'
+    value: ${{ steps.package.outputs.version }}
+  release-url:
+    description: 'GitHubリリースのURL'
+    value: ${{ steps.create-release.outputs.url }}
+  npm-url:
+    description: 'npmパッケージのURL'
+    value: https://www.npmjs.com/package/${{ steps.package.outputs.name }}/v/${{ steps.package.outputs.version }}
+  tag-exists:
+    description: 'タグが既に存在するか'
+    value: ${{ steps.tag-check.outputs.exists }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Get package info
+      id: package
+      shell: bash
+      run: |
+        VERSION=$(jq -r '.version' package.json)
+        PACKAGE_NAME=$(jq -r '.name' package.json)
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
+
+    - name: Check if tag exists
+      id: tag-check
+      shell: bash
+      run: |
+        if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+          echo "exists=true" >> $GITHUB_OUTPUT
+          echo "⚠️ Tag v$VERSION already exists. Skipping release process."
+        else
+          echo "exists=false" >> $GITHUB_OUTPUT
+        fi
+      env:
+        VERSION: ${{ steps.package.outputs.version }}
+
+    - name: Setup Node.js
+      if: steps.tag-check.outputs.exists == 'false'
+      uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+      with:
+        node-version: ${{ inputs.node-version }}
+        registry-url: 'https://registry.npmjs.org'
+
+    - name: Install latest npm
+      if: steps.tag-check.outputs.exists == 'false' && inputs.skip-npm-publish == 'false'
+      shell: bash
+      run: |
+        echo "Current npm version: $(npm -v)"
+        npm install -g npm@latest
+        echo "Updated npm version: $(npm -v)"
+
+    - name: Cache Bun dependencies
+      if: steps.tag-check.outputs.exists == 'false' && inputs.package-manager == 'bun'
+      uses: actions/cache@v4
+      with:
+        path: ~/.bun/install/cache
+        key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-bun-
+
+    - name: Setup Bun
+      if: steps.tag-check.outputs.exists == 'false' && inputs.package-manager == 'bun'
+      uses: oven-sh/setup-bun@v2
+
+    - name: Install dependencies (Bun)
+      if: steps.tag-check.outputs.exists == 'false' && inputs.package-manager == 'bun'
+      shell: bash
+      run: bun install --frozen-lockfile
+
+    - name: Install dependencies (npm)
+      if: steps.tag-check.outputs.exists == 'false' && inputs.package-manager == 'npm'
+      shell: bash
+      run: npm ci
+
+    - name: Build
+      if: steps.tag-check.outputs.exists == 'false' && inputs.build-command != ''
+      shell: bash
+      run: ${{ inputs.build-command }}
+
+    - name: Test
+      if: steps.tag-check.outputs.exists == 'false' && inputs.test-command != ''
+      shell: bash
+      run: ${{ inputs.test-command }}
+
+    - name: Publish to npm with provenance
+      if: steps.tag-check.outputs.exists == 'false' && inputs.skip-npm-publish == 'false'
+      shell: bash
+      run: npm publish --provenance --access ${{ inputs.npm-access }}
+      env:
+        NODE_AUTH_TOKEN: ${{ inputs.npm-token }}
+
+    - name: Create GitHub Release with tag
+      id: create-release
+      if: steps.tag-check.outputs.exists == 'false' && inputs.skip-github-release == 'false'
+      shell: bash
+      run: |
+        RELEASE_URL=$(gh release create "v$VERSION" \
+          --title "v$VERSION" \
+          --target "$SHA" \
+          --notes "$PR_BODY")
+        echo "url=$RELEASE_URL" >> $GITHUB_OUTPUT
+      env:
+        GH_TOKEN: ${{ inputs.github-token }}
+        VERSION: ${{ steps.package.outputs.version }}
+        SHA: ${{ github.sha }}
+        PR_BODY: ${{ inputs.pr-body }}

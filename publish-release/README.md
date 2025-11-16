@@ -1,0 +1,404 @@
+# Publish Release Action
+
+リリースPRがマージされた際に、npmパッケージの公開とGitHubリリースの作成を自動実行するComposite Actionです。
+
+## 機能
+
+- 📦 npmへの自動パッケージ公開（Provenanceサポート）
+- 🏷️ GitHubリリースとタグの自動作成
+- ✅ タグの重複チェック
+- 🔄 複数のパッケージマネージャーサポート（npm / Bun）
+- 🧪 ビルドとテストの実行
+- ⚙️ 柔軟なカスタマイズオプション
+
+## 使い方
+
+### 基本的な使い方
+
+呼び出し元のリポジトリで、以下のようなワークフローファイルを作成してください：
+
+```yaml
+name: Publish Release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  publish:
+    # リリースPRがマージされた場合のみ実行
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Publish Release
+        uses: yukukotani/github-actions/publish-release@main
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
+```
+
+### すべてのオプションを使った例
+
+```yaml
+name: Publish Release
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Publish Release
+        uses: yukukotani/github-actions/publish-release@main
+        with:
+          node-version: '20.x'
+          package-manager: 'bun'
+          build-command: 'bun run build'
+          test-command: 'bun test'
+          npm-access: 'public'
+          skip-npm-publish: 'false'
+          skip-github-release: 'false'
+          npm-token: ${{ secrets.NPM_TOKEN }}
+          pr-body: ${{ github.event.pull_request.body }}
+```
+
+## 入力パラメータ
+
+| パラメータ | 必須 | デフォルト | 説明 |
+|-----------|------|-----------|------|
+| `node-version` | ❌ | `lts/*` | 使用するNode.jsのバージョン |
+| `package-manager` | ❌ | `bun` | パッケージマネージャー（npm または bun） |
+| `build-command` | ❌ | `bun run build` | ビルドコマンド。空文字列でスキップ |
+| `test-command` | ❌ | `bun test` | テストコマンド。空文字列でスキップ |
+| `npm-access` | ❌ | `public` | npmアクセスレベル（public または restricted） |
+| `skip-npm-publish` | ❌ | `false` | npm公開をスキップするか |
+| `skip-github-release` | ❌ | `false` | GitHubリリース作成をスキップするか |
+| `npm-token` | ❌ | - | NPM Token（npm公開時に必須） |
+| `github-token` | ❌ | `${{ github.token }}` | GitHub Token |
+| `pr-body` | ❌ | `${{ github.event.pull_request.body }}` | PRの本文（リリースノートとして使用） |
+
+## 出力
+
+| 出力 | 説明 |
+|-----|------|
+| `version` | 公開されたバージョン番号 |
+| `release-url` | GitHubリリースのURL |
+| `npm-url` | npmパッケージのURL |
+| `tag-exists` | タグが既に存在するか |
+
+### 出力の使用例
+
+```yaml
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - name: Publish Release
+        id: publish
+        uses: yukukotani/github-actions/publish-release@main
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
+      
+      - name: Show outputs
+        if: steps.publish.outputs.tag-exists == 'false'
+        run: |
+          echo "Published version: ${{ steps.publish.outputs.version }}"
+          echo "Release URL: ${{ steps.publish.outputs.release-url }}"
+          echo "npm URL: ${{ steps.publish.outputs.npm-url }}"
+```
+
+## 必要な権限
+
+呼び出し元のジョブに以下の権限を設定してください：
+
+```yaml
+permissions:
+  contents: write        # GitHubリリースとタグの作成
+  id-token: write        # npm Provenance（来歴情報）
+```
+
+## 前提条件
+
+### 必須
+
+- リポジトリに `package.json` ファイルが存在すること
+- 呼び出し元のワークフローで、PRがマージされリリースラベルが付与されているかを確認する条件を設定すること（上記の使用例を参照）
+- npm tokenをシークレット `NPM_TOKEN` として登録（npm公開する場合）
+
+### npmへの公開を行う場合
+
+- package.jsonに公開に必要な情報が含まれていること
+
+### Bunを使用する場合
+
+- `bun.lock` ファイルが存在すること
+
+## ワークフローの動作
+
+1. **パッケージ情報の取得**
+   - package.jsonからバージョンとパッケージ名を取得
+
+2. **タグの重複チェック**
+   - 同じバージョンのタグが既に存在しないか確認
+   - 存在する場合は以降の処理をスキップ
+
+3. **環境セットアップ**
+   - Node.jsのセットアップ
+   - パッケージマネージャーのセットアップ
+   - 依存関係のインストール
+
+4. **ビルドとテスト**
+   - ビルドコマンドを実行
+   - テストコマンドを実行
+
+5. **npm公開** （`skip-npm-publish: false` の場合）
+   - Provenanceを含めてnpmに公開
+   - `NPM_TOKEN` シークレットを使用
+
+6. **GitHubリリース作成** （`skip-github-release: false` の場合）
+   - バージョンタグを作成
+   - PRの本文をリリースノートとして使用
+   - GitHubリリースを作成
+
+## トリガー条件
+
+呼び出し元のワークフローで以下の条件を設定することを推奨します：
+
+1. PRがマージされた（`github.event.pull_request.merged == true`）
+2. PRに指定されたラベル（例: `Type: Release`）が付与されている
+3. ターゲットブランチがmainまたはmaster
+
+上記の使用例を参照してください。
+
+## npm Provenanceについて
+
+このワークフローは[npm Provenance](https://docs.npmjs.com/generating-provenance-statements)をサポートしています。Provenanceは、パッケージがどこでビルドされたかを証明する機能で、セキュリティとトラストを向上させます。
+
+- 自動的に `--provenance` フラグ付きで公開
+- `id-token: write` 権限が必要
+- npm v9.5.0以降で利用可能
+
+## 使用例
+
+### Node.js + npmプロジェクト
+
+```yaml
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: yukukotani/github-actions/publish-release@main
+        with:
+          package-manager: 'npm'
+          build-command: 'npm run build'
+          test-command: 'npm test'
+          npm-token: ${{ secrets.NPM_TOKEN }}
+```
+
+### Bunプロジェクト（デフォルト）
+
+```yaml
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: yukukotani/github-actions/publish-release@main
+        with:
+          npm-token: ${{ secrets.NPM_TOKEN }}
+```
+
+### GitHubリリースのみ（npm公開なし）
+
+```yaml
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: yukukotani/github-actions/publish-release@main
+        with:
+          skip-npm-publish: 'true'
+```
+
+### npm公開のみ（GitHubリリースなし）
+
+```yaml
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: yukukotani/github-actions/publish-release@main
+        with:
+          skip-github-release: 'true'
+          npm-token: ${{ secrets.NPM_TOKEN }}
+```
+
+### ビルド不要のプロジェクト
+
+```yaml
+jobs:
+  publish:
+    if: |
+      github.event.pull_request.merged == true &&
+      contains(github.event.pull_request.labels.*.name, 'Type: Release')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      
+      - uses: yukukotani/github-actions/publish-release@main
+        with:
+          build-command: ''
+          test-command: ''
+          npm-token: ${{ secrets.NPM_TOKEN }}
+```
+
+## トラブルシューティング
+
+### npm公開に失敗する
+
+- `NPM_TOKEN` が正しく設定されているか確認
+- トークンに公開権限があるか確認
+- package.jsonの `name` フィールドが正しいか確認
+- スコープ付きパッケージの場合、`npm-access` が正しく設定されているか確認
+
+### GitHubリリース作成に失敗する
+
+- `contents: write` 権限が付与されているか確認
+- ブランチ保護ルールと競合していないか確認
+
+### タグが既に存在する
+
+このワークフローは自動的にタグの重複をチェックし、既存のタグがある場合は処理をスキップします。これは正常な動作です。
+
+### PRにコメントが投稿されない
+
+- `pull-requests: write` 権限が付与されているか確認
+- `comment-on-pr: true` が設定されているか確認
+
+## セキュリティに関する注意事項
+
+### NPM_TOKEN の管理
+
+- リポジトリシークレットとして安全に保管
+- 必要最小限の権限を付与
+- 定期的なトークンのローテーション推奨
+
+### Provenance の利用
+
+- Provenanceを使用することでパッケージの信頼性が向上
+- 改ざん検出が可能になる
+- npm公開時に自動的に生成される
+
+## よくある質問
+
+### Q: 複数のブランチからリリースできますか？
+
+A: はい。ワークフローのトリガーでブランチを追加してください：
+
+```yaml
+on:
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'release/**'
+    types:
+      - closed
+```
+
+### Q: プライベートパッケージを公開できますか？
+
+A: はい。`npm-access: 'restricted'` を設定してください：
+
+```yaml
+with:
+  npm-access: 'restricted'
+```
+
+### Q: モノレポで使用できますか？
+
+A: 現在のバージョンはシングルパッケージ用です。モノレポの場合は、各パッケージごとにワークフローをカスタマイズする必要があります。
+
+### Q: 異なるラベル名を使いたい
+
+A: `release-label` パラメータで変更できます：
+
+```yaml
+with:
+  release-label: 'release'
+```
+
+## ライセンス
+
+このアクションはMITライセンスの下で公開されています。
+
+## 関連アクション
+
+- [draft-release](../draft-release/README.md) - リリース用のPRを自動作成するアクション
