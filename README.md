@@ -1,6 +1,6 @@
 # GitHub Actions Collection
 
-再利用可能なGitHub Actionsのコレクションです。各アクションは、Composite ActionとReusable Workflowの両方の形式で提供されています。
+再利用可能なComposite Actionsのコレクションです。
 
 ## 📦 提供されるアクション
 
@@ -43,11 +43,7 @@
 
 ## 🎯 使用方法
 
-各アクションは2つの方法で使用できます：
-
-### 1. Composite Action として（推奨）
-
-ステップとして直接使用します。他のステップと組み合わせやすく、柔軟性が高いです。
+各アクションはComposite Actionとして提供されており、ステップとして直接使用できます。
 
 ```yaml
 jobs:
@@ -64,18 +60,6 @@ jobs:
           version: patch
 ```
 
-### 2. Reusable Workflow として
-
-ジョブとして使用します。権限設定が自動的に行われ、設定が簡単です。
-
-```yaml
-jobs:
-  my-job:
-    uses: <organization>/<repository>/draft-release/draft-release.yml@main
-    with:
-      version: patch
-```
-
 ## 📁 ディレクトリ構造
 
 ```
@@ -83,29 +67,17 @@ jobs:
 ├── README.md                      # このファイル
 ├── draft-release/
 │   ├── action.yml                # Composite Action定義
-│   ├── draft-release.yml         # Reusable Workflow定義
 │   └── README.md                 # 詳細なドキュメント
 └── publish-release/
     ├── action.yml                # Composite Action定義
-    ├── publish-release.yml       # Reusable Workflow定義
     └── README.md                 # 詳細なドキュメント
 ```
 
-## 🔑 2つの方法の使い分け
+## 💡 実践例：フルリリースワークフロー
 
-| 特徴 | Composite Action | Reusable Workflow |
-|-----|-----------------|-------------------|
-| 記述方法 | ステップとして記述 | ジョブとして記述 |
-| 権限設定 | 呼び出し元で設定が必要 | 自動的に設定される |
-| チェックアウト | 明示的に必要 | 不要 |
-| 柔軟性 | 他のステップと組み合わせやすい | ジョブ単位で独立 |
-| 推奨用途 | 複雑なワークフロー | シンプルなワークフロー |
+draft-release と publish-release を組み合わせたフルリリースワークフローの例：
 
-## 💡 実践例
-
-### draft-release + publish-release のフルワークフロー
-
-#### Composite Action を使用
+### リリースPR作成ワークフロー
 
 ```yaml
 # .github/workflows/release.yml
@@ -132,12 +104,15 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/draft-release@main
+      - name: Create Release PR
+        uses: <organization>/<repository>/draft-release@main
         with:
           version: ${{ github.event.inputs.version }}
+```
 
----
+### リリース公開ワークフロー
 
+```yaml
 # .github/workflows/publish.yml
 name: Publish
 
@@ -160,52 +135,35 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/publish-release@main
+      - name: Publish Release
+        uses: <organization>/<repository>/publish-release@main
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
 ```
 
-#### Reusable Workflow を使用
+## 🔑 主な特徴
+
+- **シンプル**: ステップとして使用でき、他のステップと簡単に組み合わせ可能
+- **柔軟**: 豊富なカスタマイズオプション
+- **安全**: npm Provenanceサポートでパッケージの来歴を証明
+- **自動化**: バージョンバンプからリリースまでを完全自動化
+
+## 📋 各アクションで必要な権限
+
+### draft-release
 
 ```yaml
-# .github/workflows/release.yml
-name: Release
+permissions:
+  contents: write        # バージョンファイルの変更とコミット
+  pull-requests: write   # PRの作成
+```
 
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version type'
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+### publish-release
 
-jobs:
-  draft:
-    uses: <organization>/<repository>/draft-release/draft-release.yml@main
-    with:
-      version: ${{ github.event.inputs.version }}
-
----
-
-# .github/workflows/publish.yml
-name: Publish
-
-on:
-  pull_request:
-    branches:
-      - main
-    types:
-      - closed
-
-jobs:
-  publish:
-    uses: <organization>/<repository>/publish-release/publish-release.yml@main
-    secrets:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+```yaml
+permissions:
+  contents: write        # GitHubリリースとタグの作成
+  id-token: write        # npm Provenance（来歴情報）
 ```
 
 ## 🤝 コントリビューション
@@ -220,4 +178,4 @@ MIT License
 
 - [GitHub Actions ドキュメント](https://docs.github.com/en/actions)
 - [Composite Actions について](https://docs.github.com/en/actions/creating-actions/creating-a-composite-action)
-- [Reusable Workflows について](https://docs.github.com/en/actions/using-workflows/reusing-workflows)
+- [npm Provenance について](https://docs.npmjs.com/generating-provenance-statements)

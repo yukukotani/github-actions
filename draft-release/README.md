@@ -1,10 +1,6 @@
 # Draft Release Action
 
-リリース用のPRを自動作成するGitHub Actionです。package.jsonのバージョンをバンプし、リリースノートを自動生成してドラフトPRを作成します。
-
-このアクションは2つの方法で使用できます：
-- **Composite Action** として（推奨）
-- **Reusable Workflow** として
+リリース用のPRを自動作成するComposite Actionです。package.jsonのバージョンをバンプし、リリースノートを自動生成してドラフトPRを作成します。
 
 ## 機能
 
@@ -16,7 +12,7 @@
 
 ## 使い方
 
-### 方法1: Composite Action として使用（推奨）
+### 基本的な使い方
 
 呼び出し元のリポジトリで、以下のようなワークフローファイルを作成してください：
 
@@ -51,35 +47,7 @@ jobs:
           version: ${{ github.event.inputs.version }}
 ```
 
-### 方法2: Reusable Workflow として使用
-
-呼び出し元のリポジトリで、以下のようなワークフローファイルを作成してください：
-
-```yaml
-name: Draft Release
-
-on:
-  workflow_dispatch:
-    inputs:
-      version:
-        description: 'Version type'
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
-
-jobs:
-  draft-release:
-    uses: <organization>/<repository>/draft-release/draft-release.yml@main
-    with:
-      version: ${{ github.event.inputs.version }}
-```
-
-**注意**: Reusable Workflowの場合、権限は自動的に設定されます。
-
-### すべてのオプションを使った例（Composite Action）
+### すべてのオプションを使った例
 
 ```yaml
 name: Draft Release
@@ -123,9 +91,9 @@ jobs:
 | `version` | ✅ | - | バージョンタイプ（patch/minor/major） |
 | `node-version` | ❌ | `lts/*` | 使用するNode.jsのバージョン |
 | `package-manager` | ❌ | `npm` | 使用するパッケージマネージャー（npm または none） |
-| `pr-labels` | ❌ | `Type: Release` | PRに付与するラベル（カンマ区切り、Composite Action）または JSON配列形式（Reusable Workflow） |
+| `pr-labels` | ❌ | `Type: Release` | PRに付与するラベル（カンマ区切り） |
 | `draft-pr` | ❌ | `true` | PRをドラフトとして作成するか |
-| `github-token` | ❌ | `${{ github.token }}` | GitHub Token（Composite Actionのみ） |
+| `github-token` | ❌ | `${{ github.token }}` | GitHub Token |
 
 ## 出力
 
@@ -133,9 +101,9 @@ jobs:
 |-----|------|
 | `version` | バンプ後の新しいバージョン番号 |
 | `pr-number` | 作成されたPRの番号 |
-| `pr-url` | 作成されたPRのURL（Composite Actionのみ） |
+| `pr-url` | 作成されたPRのURL |
 
-### 出力の使用例（Composite Action）
+### 出力の使用例
 
 ```yaml
 jobs:
@@ -160,28 +128,7 @@ jobs:
           echo "PR URL: ${{ steps.draft-pr.outputs.pr-url }}"
 ```
 
-### 出力の使用例（Reusable Workflow）
-
-```yaml
-jobs:
-  draft-release:
-    uses: <organization>/<repository>/draft-release/draft-release.yml@main
-    with:
-      version: ${{ github.event.inputs.version }}
-
-  notify:
-    needs: draft-release
-    runs-on: ubuntu-latest
-    steps:
-      - name: Notify
-        run: |
-          echo "New version: ${{ needs.draft-release.outputs.version }}"
-          echo "PR number: ${{ needs.draft-release.outputs.pr-number }}"
-```
-
 ## 必要な権限
-
-### Composite Actionの場合
 
 呼び出し元のジョブに以下の権限を設定してください：
 
@@ -190,10 +137,6 @@ permissions:
   contents: write        # バージョンファイルの変更とコミット
   pull-requests: write   # PRの作成
 ```
-
-### Reusable Workflowの場合
-
-権限は自動的に設定されるため、呼び出し元での設定は不要です。
 
 ## 前提条件
 
@@ -240,19 +183,9 @@ permissions:
 - リポジトリの設定でGitHub Actionsにワークフロー権限が付与されているか確認
 - `GITHUB_TOKEN` に適切な権限があるか確認
 
-## 2つの方法の使い分け
-
-| 特徴 | Composite Action | Reusable Workflow |
-|-----|-----------------|-------------------|
-| 記述の簡潔さ | ステップとして記述 | ジョブとして記述 |
-| 権限設定 | 呼び出し元で設定が必要 | 自動的に設定される |
-| チェックアウト | 明示的に必要 | 不要 |
-| 柔軟性 | 他のステップと組み合わせやすい | ジョブ単位で独立 |
-| 推奨用途 | 他のステップと組み合わせる場合 | 単独で完結する場合 |
-
 ## カスタマイズ例
 
-### 異なるブランチをベースにする（Composite Action）
+### 異なるブランチをベースにする
 
 ```yaml
 jobs:
@@ -277,8 +210,8 @@ jobs:
 
 ## ライセンス
 
-このワークフローはMITライセンスの下で公開されています。
+このアクションはMITライセンスの下で公開されています。
 
-## 関連ワークフロー
+## 関連アクション
 
-- [publish-release](../publish-release/README.md) - リリースPRがマージされた際に自動的にnpmパッケージを公開し、GitHubリリースを作成するワークフロー
+- [publish-release](../publish-release/README.md) - リリースPRがマージされた際に自動的にnpmパッケージを公開し、GitHubリリースを作成するアクション
