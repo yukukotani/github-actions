@@ -14,10 +14,6 @@ inputs:
     description: '使用するNode.jsのバージョン'
     required: false
     default: 'lts/*'
-  package-manager:
-    description: 'パッケージマネージャー (npm または none)'
-    required: false
-    default: 'npm'
   pr-labels:
     description: 'PRに付与するラベル (カンマ区切り)'
     required: false
@@ -52,7 +48,6 @@ runs:
         git config user.email "github-actions[bot]@users.noreply.github.com"
 
     - name: Setup Node.js
-      if: inputs.package-manager != 'none'
       uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
       with:
         node-version: ${{ inputs.node-version }}
@@ -61,21 +56,11 @@ runs:
       id: version
       shell: bash
       run: |
-        if [ "$PACKAGE_MANAGER" = "npm" ]; then
-          npm version "$VERSION_TYPE" --no-git-tag-version
-        elif [ "$PACKAGE_MANAGER" = "none" ]; then
-          echo "Package manager is set to 'none', skipping version bump"
-          echo "version=unknown" >> $GITHUB_OUTPUT
-          exit 0
-        else
-          echo "Package manager '$PACKAGE_MANAGER' is not supported for version bump"
-          exit 1
-        fi
+        npm version "$VERSION_TYPE" --no-git-tag-version
         VERSION=$(jq -r '.version' package.json)
         echo "version=$VERSION" >> $GITHUB_OUTPUT
       env:
         VERSION_TYPE: ${{ inputs.version }}
-        PACKAGE_MANAGER: ${{ inputs.package-manager }}
 
     - name: Get release notes
       id: release-notes

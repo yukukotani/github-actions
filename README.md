@@ -15,7 +15,7 @@
 
 **使い方:**
 ```yaml
-- uses: <organization>/<repository>/draft-release@main
+- uses: yukukotani/github-actions/draft-release@main
   with:
     version: patch
 ```
@@ -34,7 +34,7 @@
 
 **使い方:**
 ```yaml
-- uses: <organization>/<repository>/publish-release@main
+- uses: yukukotani/github-actions/publish-release@main
   with:
     npm-token: ${{ secrets.NPM_TOKEN }}
 ```
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/draft-release@main
+      - uses: yukukotani/github-actions/draft-release@main
         with:
           version: patch
 ```
@@ -105,7 +105,7 @@ jobs:
       - uses: actions/checkout@v5
       
       - name: Create Release PR
-        uses: <organization>/<repository>/draft-release@main
+        uses: yukukotani/github-actions/draft-release@main
         with:
           version: ${{ github.event.inputs.version }}
 ```
@@ -136,7 +136,7 @@ jobs:
       - uses: actions/checkout@v5
       
       - name: Publish Release
-        uses: <organization>/<repository>/publish-release@main
+        uses: yukukotani/github-actions/publish-release@main
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
 ```

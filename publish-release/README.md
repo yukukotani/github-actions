@@ -43,7 +43,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Publish Release
-        uses: <organization>/<repository>/publish-release@main
+        uses: yukukotani/github-actions/publish-release@main
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
 ```
@@ -75,7 +75,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Publish Release
-        uses: <organization>/<repository>/publish-release@main
+        uses: yukukotani/github-actions/publish-release@main
         with:
           node-version: '20.x'
           package-manager: 'bun'
@@ -130,7 +130,7 @@ jobs:
       
       - name: Publish Release
         id: publish
-        uses: <organization>/<repository>/publish-release@main
+        uses: yukukotani/github-actions/publish-release@main
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
       
@@ -230,7 +230,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/publish-release@main
+      - uses: yukukotani/github-actions/publish-release@main
         with:
           package-manager: 'npm'
           build-command: 'npm run build'
@@ -253,7 +253,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/publish-release@main
+      - uses: yukukotani/github-actions/publish-release@main
         with:
           npm-token: ${{ secrets.NPM_TOKEN }}
 ```
@@ -272,7 +272,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/publish-release@main
+      - uses: yukukotani/github-actions/publish-release@main
         with:
           skip-npm-publish: 'true'
 ```
@@ -291,7 +291,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/publish-release@main
+      - uses: yukukotani/github-actions/publish-release@main
         with:
           skip-github-release: 'true'
           npm-token: ${{ secrets.NPM_TOKEN }}
@@ -312,7 +312,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       
-      - uses: <organization>/<repository>/publish-release@main
+      - uses: yukukotani/github-actions/publish-release@main
         with:
           build-command: ''
           test-command: ''

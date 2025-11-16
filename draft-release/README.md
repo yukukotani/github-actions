@@ -1,6 +1,6 @@
 # Draft Release Action
 
-リリース用のPRを自動作成するComposite Actionです。package.jsonのバージョンをバンプし、リリースノートを自動生成してドラフトPRを作成します。
+リリース用のPRを自動作成するComposite Actionです。npmを使用してpackage.jsonのバージョンをバンプし、リリースノートを自動生成してドラフトPRを作成します。
 
 ## 機能
 
@@ -9,6 +9,7 @@
 - 🏷️ 前回のリリースタグから変更履歴を自動抽出
 - 📬 ドラフトPRの自動作成
 - 🎯 カスタマイズ可能なラベルとアサイン
+- 🔧 npm固定で動作
 
 ## 使い方
 
@@ -42,7 +43,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Create Draft Release PR
-        uses: <organization>/<repository>/draft-release@main
+        uses: yukukotani/github-actions/draft-release@main
         with:
           version: ${{ github.event.inputs.version }}
 ```
@@ -75,11 +76,10 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Create Draft Release PR
-        uses: <organization>/<repository>/draft-release@main
+        uses: yukukotani/github-actions/draft-release@main
         with:
           version: ${{ github.event.inputs.version }}
           node-version: '20.x'
-          package-manager: 'npm'
           pr-labels: 'Type: Release,automated'
           draft-pr: 'true'
 ```
@@ -90,7 +90,6 @@ jobs:
 |-----------|------|-----------|------|
 | `version` | ✅ | - | バージョンタイプ（patch/minor/major） |
 | `node-version` | ❌ | `lts/*` | 使用するNode.jsのバージョン |
-| `package-manager` | ❌ | `npm` | 使用するパッケージマネージャー（npm または none） |
 | `pr-labels` | ❌ | `Type: Release` | PRに付与するラベル（カンマ区切り） |
 | `draft-pr` | ❌ | `true` | PRをドラフトとして作成するか |
 | `github-token` | ❌ | `${{ github.token }}` | GitHub Token |
@@ -117,7 +116,7 @@ jobs:
       
       - name: Create Draft Release PR
         id: draft-pr
-        uses: <organization>/<repository>/draft-release@main
+        uses: yukukotani/github-actions/draft-release@main
         with:
           version: ${{ github.event.inputs.version }}
       
@@ -141,14 +140,14 @@ permissions:
 ## 前提条件
 
 - リポジトリに `package.json` ファイルが存在すること
-- `package-manager` に `npm` を指定する場合、Node.jsプロジェクトであること
+- Node.jsプロジェクトであること（npmを使用）
 
 ## ワークフローの動作
 
 1. リポジトリをチェックアウト
 2. Gitの設定（github-actions[bot]として）
-3. Node.jsのセットアップ（指定されたpackage-managerが `none` でない場合）
-4. package.jsonのバージョンをバンプ
+3. Node.jsのセットアップ
+4. npmを使用してpackage.jsonのバージョンをバンプ
 5. GitHub APIを使用してリリースノートを自動生成
    - 前回のリリースタグを自動検出
    - 前回のリリースから現在までの変更履歴を抽出
@@ -172,7 +171,7 @@ permissions:
 
 ### package.jsonが見つからない
 
-このワークフローはNode.js/npmプロジェクトを前提としています。package.jsonが存在しない場合は、`package-manager: 'none'` を指定して独自のバージョンバンプロジックを実装してください。
+このアクションはNode.js/npmプロジェクトを前提としています。package.jsonが存在することを確認してください。
 
 ### 権限エラーが発生する
 
@@ -199,7 +198,7 @@ jobs:
         with:
           ref: develop
       
-      - uses: <organization>/<repository>/draft-release@main
+      - uses: yukukotani/github-actions/draft-release@main
         with:
           version: ${{ github.event.inputs.version }}
 ```
