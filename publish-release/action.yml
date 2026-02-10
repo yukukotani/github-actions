@@ -27,6 +27,10 @@ inputs:
     description: 'npmアクセスレベル (public または restricted)'
     required: false
     default: 'public'
+  skip-test:
+    description: 'テスト実行をスキップするか'
+    required: false
+    default: 'false'
   skip-npm-publish:
     description: 'npm公開をスキップするか'
     required: false
@@ -130,7 +134,7 @@ runs:
       run: ${{ inputs.build-command }}
 
     - name: Test
-      if: steps.tag-check.outputs.exists == 'false' && inputs.test-command != ''
+      if: steps.tag-check.outputs.exists == 'false' && inputs.skip-test == 'false' && inputs.test-command != ''
       shell: bash
       run: ${{ inputs.test-command }}
 

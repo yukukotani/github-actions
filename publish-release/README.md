@@ -82,6 +82,7 @@ jobs:
           build-command: 'bun run build'
           test-command: 'bun test'
           npm-access: 'public'
+          skip-test: 'false'
           skip-npm-publish: 'false'
           skip-github-release: 'false'
           npm-token: ${{ secrets.NPM_TOKEN }}
@@ -97,6 +98,7 @@ jobs:
 | `build-command` | ❌ | `bun run build` | ビルドコマンド。空文字列でスキップ |
 | `test-command` | ❌ | `bun test` | テストコマンド。空文字列でスキップ |
 | `npm-access` | ❌ | `public` | npmアクセスレベル（public または restricted） |
+| `skip-test` | ❌ | `false` | テスト実行をスキップするか |
 | `skip-npm-publish` | ❌ | `false` | npm公開をスキップするか |
 | `skip-github-release` | ❌ | `false` | GitHubリリース作成をスキップするか |
 | `npm-token` | ❌ | - | NPM Token（npm公開時に必須） |
