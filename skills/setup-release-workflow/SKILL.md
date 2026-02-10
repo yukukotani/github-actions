@@ -27,7 +27,27 @@ Read `package.json` and check for:
 
 Also detect the default branch name (`main` or `master`) via `git`.
 
-### 2. Create workflow files
+### 2. Ensure `repository` field in package.json
+
+npm provenance verification requires `package.json` to have a `repository` field whose URL matches the GitHub repository. Inspect `package.json` and fix if needed:
+
+- If `repository` is missing or empty, add it.
+- If `repository.url` does not match `https://github.com/<owner>/<repo>`, update it.
+
+The expected format:
+
+```json
+{
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/<owner>/<repo>"
+  }
+}
+```
+
+The shorthand form `"repository": "github:<owner>/<repo>"` also works.
+
+### 3. Create workflow files
 
 Generate two files under `.github/workflows/`. Use the templates in [references/workflow-templates.md](references/workflow-templates.md) as the base, adjusting parameters based on what was found in step 1:
 
@@ -39,7 +59,7 @@ Generate two files under `.github/workflows/`. Use the templates in [references/
   - `npm-token` line: include `npm-token: ${{ secrets.NPM_TOKEN }}` unless the user says npm publish is not needed
   - `skip-npm-publish`: set to `'true'` if the user says npm publish is not needed
 
-### 3. Post-setup checklist
+### 4. Post-setup checklist
 
 After creating the files, present the following checklist to the user. These are manual steps the user must complete themselves.
 
